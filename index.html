@@ -19,8 +19,8 @@
   .pad { position: absolute; bottom: 18px; pointer-events: auto;
          display: flex; align-items: center; justify-content: center;
          font: bold 28px monospace; color: #fff; border-radius: 50%;
-         background: rgba(255,255,255,0.18); border: 2px solid rgba(255,255,255,0.4);
-         width: 74px; height: 74px; backdrop-filter: blur(2px); }
+         background: rgba(255,255,255,0.22); border: 2px solid rgba(255,255,255,0.45);
+         width: 74px; height: 74px; }
   .pad:active { background: rgba(255,255,255,0.45); }
   #bLeft  { left: 18px; }
   #bRight { left: 108px; }
@@ -60,9 +60,65 @@ const GRAV = 0.55;
 // Real-photo face. Priority: saved upload (localStorage) > "hoang_face.png" next to file
 const faceImg = new Image();
 let faceReady = false;
-faceImg.onload = () => { faceReady = true; };
+const PW = 70, PH = 100;                 // player sprite size
+const faceSprite = document.createElement('canvas');
+faceSprite.width = PW; faceSprite.height = PH;
+const fsx = faceSprite.getContext('2d');
+
+function roundPath(g,w,h,r){
+  g.beginPath();
+  g.moveTo(r,0); g.arcTo(w,0,w,h,r); g.arcTo(w,h,0,h,r);
+  g.arcTo(0,h,0,0,r); g.arcTo(0,0,w,0,r); g.closePath();
+}
+function buildFaceSprite(){
+  const iw=faceImg.naturalWidth, ih=faceImg.naturalHeight;
+  const tAsp=PW/PH, iAsp=iw/ih;
+  let sw,sh,sX,sY;
+  if(iAsp>tAsp){ sh=ih; sw=ih*tAsp; sX=(iw-sw)/2; sY=0; }
+  else         { sw=iw; sh=iw/tAsp; sX=0; sY=(ih-sh)*0.2; }
+  fsx.clearRect(0,0,PW,PH);
+  fsx.save(); roundPath(fsx,PW,PH,10); fsx.clip();
+  fsx.drawImage(faceImg, sX,sY,sw,sh, 0,0,PW,PH);
+  fsx.restore();
+  fsx.lineWidth=3; fsx.strokeStyle='#fff'; roundPath(fsx,PW,PH,10); fsx.stroke();
+  faceReady = true;
+}
+faceImg.onload = buildFaceSprite;
 
 function setFaceSrc(src){ faceReady = false; faceImg.src = src; }
+
+// Generic photo-sprite for enemies: pre-render once into an offscreen canvas
+function makePhotoSprite(src, w, h, border){
+  const o = { canvas: document.createElement('canvas'), ready: false, w, h };
+  o.canvas.width = w; o.canvas.height = h;
+  const g = o.canvas.getContext('2d');
+  const img = new Image();
+  img.onload = () => {
+    const iw=img.naturalWidth, ih=img.naturalHeight;
+    const tAsp=w/h, iAsp=iw/ih;
+    let sw,sh,sX,sY;
+    if(iAsp>tAsp){ sh=ih; sw=ih*tAsp; sX=(iw-sw)/2; sY=0; }
+    else         { sw=iw; sh=iw/tAsp; sX=0; sY=(ih-sh)*0.15; }
+    g.clearRect(0,0,w,h);
+    g.save(); roundPath(g,w,h,8); g.clip();
+    g.drawImage(img, sX,sY,sw,sh, 0,0,w,h);
+    g.restore();
+    g.lineWidth=3; g.strokeStyle=border||'#fff'; roundPath(g,w,h,8); g.stroke();
+    o.ready = true;
+  };
+  img.src = src;
+  return o;
+}
+// Enemy photo sprites (big — near boss size)
+const SPR_TUAN   = makePhotoSprite('Tuấn.jpg',       84, 92,  '#ffaa33');
+const SPR_DUONG  = makePhotoSprite('Duong slim.jpg', 80, 124, '#66aaff');
+const SPR_DUYCAM = makePhotoSprite('duycam.png',     98, 108, '#cc66ff');
+const SPR_BOSS   = makePhotoSprite('Đoàn.jpg',       150,190, '#ffcc00');
+
+// Birthday celebration photo for the win screen
+const bdayImg = new Image(); let bdayReady=false;
+bdayImg.onload = ()=>{ bdayReady=true; };
+bdayImg.src = 'anh sinh nhat.jpg';
 
 // Restore previously uploaded face, else try the sidecar png
 const savedFace = localStorage.getItem('hoangFace');
@@ -245,26 +301,8 @@ class Player {
     ctx.scale(this.facing, 1);              // flip when facing left
 
     if (faceReady) {
-      // Whole photo IS the character
-      ctx.imageSmoothingEnabled = true;
-      const iw=faceImg.naturalWidth, ih=faceImg.naturalHeight;
-      const tAsp=this.w/this.h, iAsp=iw/ih;
-      let sw, sh, sX, sY;                    // source crop (cover)
-      if (iAsp > tAsp) { sh=ih; sw=ih*tAsp; sX=(iw-sw)/2; sY=0; }
-      else             { sw=iw; sh=iw/tAsp; sX=0; sY=(ih-sh)*0.2; }
-      // rounded frame
-      const w=this.w, h=this.h, r=10;
-      ctx.beginPath();
-      ctx.moveTo(-w/2+r,-h/2);
-      ctx.arcTo(w/2,-h/2, w/2,h/2, r);
-      ctx.arcTo(w/2,h/2, -w/2,h/2, r);
-      ctx.arcTo(-w/2,h/2, -w/2,-h/2, r);
-      ctx.arcTo(-w/2,-h/2, w/2,-h/2, r);
-      ctx.closePath();
-      ctx.save(); ctx.clip();
-      ctx.drawImage(faceImg, sX,sY,sw,sh, -w/2,-h/2, w,h);
-      ctx.restore();
-      ctx.lineWidth=3; ctx.strokeStyle='#fff'; ctx.stroke();
+      const w=this.w, h=this.h;
+      ctx.drawImage(faceSprite, -w/2, -h/2, w, h);   // pre-rendered, cheap
       // tiny party hat
       ctx.fillStyle='#ee2222';
       ctx.beginPath(); ctx.moveTo(0,-h/2-16); ctx.lineTo(-12,-h/2+2); ctx.lineTo(12,-h/2+2); ctx.closePath(); ctx.fill();
@@ -459,6 +497,15 @@ class Enemy {
     rect(sx,sy-8,this.w,5,'#333');
     rect(sx,sy-8,this.w*(this.hp/this.maxHp),5,'#f00');
   }
+  blit(spr,sx,sy,fallback){
+    if(spr&&spr.ready){
+      ctx.save();
+      ctx.translate(sx+(this.facing===-1?this.w:0),0);
+      ctx.scale(this.facing,1);
+      ctx.drawImage(spr.canvas,0,sy,this.w,this.h);
+      ctx.restore();
+    } else fallback();
+  }
   nameTag(sx,sy) {
     if(this.dead) return;
     ctx.font='bold 11px monospace'; ctx.textAlign='center';
@@ -470,9 +517,9 @@ class Enemy {
   }
 }
 
-// Duệ
+// Tuấn (trước là Duệ) — patrol
 class EnemyDue extends Enemy {
-  constructor(x,y) { super(x,y,32,38,1); this.startX=x; this.dir=1; this.name='Duệ'; }
+  constructor(x,y) { super(x,y,84,92,1); this.startX=x; this.dir=1; this.name='Tuấn'; }
   update() {
     if(this.dead){this.deathT--;return;}
     this.vx = this.dir*1.1;
@@ -484,11 +531,7 @@ class EnemyDue extends Enemy {
     if(this.dead&&this.deathT<=0) return;
     const sx=this.x-cam.x, sy=this.y;
     ctx.globalAlpha = this.dead ? this.deathT/35 : 1;
-    ctx.save();
-    ctx.translate(sx+(this.facing===-1?this.w:0),0);
-    ctx.scale(this.facing,1);
-    drawDue(0,sy,this.frame);
-    ctx.restore();
+    this.blit(SPR_TUAN,sx,sy,()=>drawDue(sx,sy,this.frame));
     this.hpbar(sx,sy); this.nameTag(sx,sy);
     ctx.globalAlpha=1;
   }
@@ -496,7 +539,7 @@ class EnemyDue extends Enemy {
 
 // Dương slim
 class EnemyDuong extends Enemy {
-  constructor(x,y) { super(x,y,24,50,1); this.range=260; this.aggro=false; this.name='Dương slim'; }
+  constructor(x,y) { super(x,y,80,124,1); this.range=260; this.aggro=false; this.name='Dương slim'; }
   update() {
     if(this.dead){this.deathT--;return;}
     const dx=player.x-this.x;
@@ -511,11 +554,7 @@ class EnemyDuong extends Enemy {
     if(this.dead&&this.deathT<=0) return;
     const sx=this.x-cam.x, sy=this.y;
     ctx.globalAlpha = this.dead ? this.deathT/35 : 1;
-    ctx.save();
-    ctx.translate(sx+(this.facing===-1?this.w:0),0);
-    ctx.scale(this.facing,1);
-    drawDuong(0,sy,this.frame);
-    ctx.restore();
+    this.blit(SPR_DUONG,sx,sy,()=>drawDuong(sx,sy,this.frame));
     this.hpbar(sx,sy); this.nameTag(sx,sy);
     ctx.globalAlpha=1;
   }
@@ -523,15 +562,16 @@ class EnemyDuong extends Enemy {
 
 // Duy câm
 class EnemyDuyCam extends Enemy {
-  constructor(x,y) { super(x,y,34,44,2); this.shootT=Math.floor(140+Math.random()*100); this.name='Duy câm'; }
+  constructor(x,y) { super(x,y,98,108,2); this.shootT=Math.floor(140+Math.random()*100); this.name='Duy câm'; }
   update() {
     if(this.dead){this.deathT--;return;}
     this.facing = player.x<this.x ? -1 : 1;
     if(--this.shootT<=0) {
       this.shootT=180+Math.floor(Math.random()*120);
-      const dx=player.x+17-(this.x+17), dy=player.y+26-(this.y+22);
+      const ox=this.x+this.w/2, oy=this.y+this.h/2;
+      const dx=player.x+player.w/2-ox, dy=player.y+player.h*0.4-oy;
       const len=Math.sqrt(dx*dx+dy*dy)||1;
-      projs.push(new Proj(this.x+17,this.y+22, dx/len*4.0, dy/len*4.0,'enemy','#ff6600'));
+      projs.push(new Proj(ox,oy, dx/len*4.0, dy/len*4.0,'enemy','#ff6600'));
     }
     this.physics(); this.touchPlayer();
   }
@@ -539,22 +579,24 @@ class EnemyDuyCam extends Enemy {
     if(this.dead&&this.deathT<=0) return;
     const sx=this.x-cam.x, sy=this.y;
     ctx.globalAlpha = this.dead ? this.deathT/35 : 1;
-    ctx.save();
-    ctx.translate(sx+(this.facing===-1?this.w:0),0);
-    ctx.scale(this.facing,1);
-    drawDuyCam(0,sy, this.shootT<25);
-    ctx.restore();
+    this.blit(SPR_DUYCAM,sx,sy,()=>drawDuyCam(sx,sy, this.shootT<25));
+    // gun muzzle hint when about to shoot
+    if(this.shootT<25 && !this.dead){
+      ctx.fillStyle='#ffee00';
+      ctx.beginPath(); ctx.arc(sx+(this.facing===1?this.w+4:-4),sy+this.h*0.5,5,0,Math.PI*2); ctx.fill();
+    }
     this.hpbar(sx,sy); this.nameTag(sx,sy);
     ctx.globalAlpha=1;
   }
 }
 
-// Boss Hùng Trần
+// Boss Đoàn chim
 class EnemyBoss extends Enemy {
   constructor(x,y) {
-    super(x,y,56,76,6);
+    super(x,y,150,190,6);
     this.startX=x; this.enraged=false;
-    this.shootT=200; this.chargeCD=380; this.chargeT=0; this.name='Hùng Trần';
+    this.shootT=200; this.chargeCD=380; this.chargeT=0; this.name='Đoàn chim';
+    this.arenaL=4260; this.arenaR=5780;   // boss stays inside its zone
   }
   update() {
     if(this.dead){
@@ -578,24 +620,47 @@ class EnemyBoss extends Enemy {
       if(--this.shootT<=0) {
         this.shootT=this.enraged?90:170;
         const cnt=this.enraged?4:3;
-        const base=Math.atan2(player.y-this.y,dx);
+        const ox=this.x+this.w/2, oy=this.y+this.h*0.45;
+        const base=Math.atan2(player.y+player.h*0.4-oy, player.x+player.w/2-ox);
         for(let i=0;i<cnt;i++){
           const a=base+(i/(cnt-1)-0.5)*0.9;
-          projs.push(new Proj(this.x+28,this.y+36, Math.cos(a)*4.5,Math.sin(a)*4.5,'enemy','#cc0000'));
+          projs.push(new Proj(ox,oy, Math.cos(a)*4.5,Math.sin(a)*4.5,'enemy','#cc0000'));
         }
       }
     }
     this.physics(); this.touchPlayer();
+    // keep boss locked inside its arena
+    if(this.x<this.arenaL){ this.x=this.arenaL; this.vx=0; }
+    if(this.x>this.arenaR-this.w){ this.x=this.arenaR-this.w; this.vx=0; }
   }
   draw() {
     if(this.dead&&this.deathT<=0) return;
     const sx=this.x-cam.x, sy=this.y;
     ctx.globalAlpha=this.dead?this.deathT/60:1;
-    ctx.save();
-    ctx.translate(sx+(this.facing===-1?this.w:0),0);
-    ctx.scale(this.facing,1);
-    drawBoss(0,sy,this.enraged,this.chargeT>0);
-    ctx.restore();
+    if(SPR_BOSS.ready){
+      this.blit(SPR_BOSS,sx,sy,()=>{});
+      // red rage glow when enraged
+      if(this.enraged && !this.dead && Math.floor(Date.now()/120)%2===0){
+        ctx.strokeStyle='#ff0000'; ctx.lineWidth=4;
+        ctx.strokeRect(sx-2,sy-2,this.w+4,this.h+4);
+      }
+    } else {
+      ctx.save();
+      ctx.translate(sx+(this.facing===-1?this.w:0),sy);
+      ctx.scale(this.facing,1);
+      ctx.scale(this.w/56, this.h/80);
+      drawBoss(0,0,this.enraged,this.chargeT>0);
+      ctx.restore();
+    }
+    if(!this.dead){
+      // big name tag above boss
+      ctx.font='bold 16px monospace'; ctx.textAlign='center';
+      const cx=sx+this.w/2, ny=sy-12;
+      const tw=ctx.measureText(this.name).width+14;
+      ctx.fillStyle='rgba(160,0,0,0.85)'; ctx.fillRect(cx-tw/2,ny-15,tw,20);
+      ctx.fillStyle='#ffdd00'; ctx.fillText(this.name,cx,ny);
+      ctx.textAlign='left';
+    }
     ctx.globalAlpha=1;
     // Boss HP bar top center
     if(!this.dead){
@@ -605,7 +670,7 @@ class EnemyBoss extends Enemy {
       ctx.strokeRect(VW/2-200,12,400,18);
       ctx.fillStyle='#fff'; ctx.font='bold 11px monospace';
       ctx.textAlign='center';
-      ctx.fillText('BOSS: HÙNG TRẦN'+(this.enraged?' ⚡ ĐIÊN TIẾT!':''),VW/2,26);
+      ctx.fillText('BOSS: ĐOÀN CHIM'+(this.enraged?' ⚡ ĐIÊN TIẾT!':''),VW/2,26);
       ctx.textAlign='left';
     }
   }
@@ -700,11 +765,12 @@ const BALLOONS=[
   {wx:5300, wy:VH-260, col:'#00cccc'},
 ];
 
+let _skyGrad=null;
 function drawBG() {
-  // Sky gradient
-  const g=ctx.createLinearGradient(0,0,0,VH);
-  g.addColorStop(0,'#72c6e8'); g.addColorStop(1,'#c8eef8');
-  ctx.fillStyle=g; ctx.fillRect(0,0,VW,VH);
+  // Sky gradient (cached)
+  if(!_skyGrad){ _skyGrad=ctx.createLinearGradient(0,0,0,VH);
+    _skyGrad.addColorStop(0,'#72c6e8'); _skyGrad.addColorStop(1,'#c8eef8'); }
+  ctx.fillStyle=_skyGrad; ctx.fillRect(0,0,VW,VH);
 
   // Clouds (parallax 0.25)
   ctx.fillStyle='rgba(255,255,255,0.92)';
@@ -715,26 +781,28 @@ function drawBG() {
     drawCloud(sx,cy);
   }
 
-  // Hills (parallax 0.6)
+  // Hills (parallax 0.6) — only visible range
   ctx.fillStyle='#56b356';
-  for(let hx=0;hx<WW+400;hx+=500){
+  let h0=Math.floor((cam.x*0.6-450)/500)*500;
+  for(let hx=h0;hx<cam.x*0.6+VW+250;hx+=500){
     const sx=(hx-cam.x*0.6);
     ctx.beginPath(); ctx.arc(sx+250,VH-10,200,Math.PI,0); ctx.fill();
   }
   ctx.fillStyle='#3ea03e';
-  for(let hx=250;hx<WW+400;hx+=500){
+  let h1=Math.floor((cam.x*0.7-450)/500)*500+250;
+  for(let hx=h1;hx<cam.x*0.7+VW+250;hx+=500){
     const sx=(hx-cam.x*0.7);
     ctx.beginPath(); ctx.arc(sx+250,VH-10,160,Math.PI,0); ctx.fill();
   }
 
-  // Bunting flags
-  for(let bx=0;bx<WW;bx+=90){
+  // Bunting flags — only visible range
+  let b0=Math.floor((cam.x-90)/90)*90;
+  ctx.strokeStyle='rgba(0,0,0,0.25)'; ctx.lineWidth=1;
+  for(let bx=b0;bx<cam.x+VW+90;bx+=90){
     const sx=bx-cam.x;
-    if(sx<-100||sx>VW+100) continue;
     const ci=Math.floor(bx/90)%BUNTING.length;
     ctx.fillStyle=BUNTING[ci];
     ctx.beginPath(); ctx.moveTo(sx,35); ctx.lineTo(sx+45,62); ctx.lineTo(sx+90,35); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle='rgba(0,0,0,0.25)'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(sx,35); ctx.lineTo(sx+90,35); ctx.stroke();
   }
 
@@ -833,45 +901,90 @@ function drawGameOver(){
   ctx.textAlign='left';
 }
 
+const EMOJIS=['🎉','🎂','🎈','🥳','🎁','⭐','💖','🍰','✨','🎊'];
 function drawWin(){
   winTimer++;
-  updateConfetti(); drawConfetti();
-  ctx.fillStyle='rgba(0,0,20,0.72)'; ctx.fillRect(0,0,VW,VH);
-  // stars
-  ctx.fillStyle='#ffff99';
-  for(let i=0;i<25;i++){
-    const sx=(i*137)%VW, sy=(i*97)%(VH*0.45);
-    const s=Math.abs(Math.sin(winTimer*0.06+i))*5+2;
-    ctx.fillRect(sx,sy,s,s);
+  const t=winTimer;
+
+  // 1) flashing rainbow background
+  ctx.fillStyle=`hsl(${(t*6)%360},85%,52%)`;
+  ctx.fillRect(0,0,VW,VH);
+  // strobe overlay
+  ctx.fillStyle=`rgba(${Math.floor(128+127*Math.sin(t*0.4))},0,${Math.floor(128+127*Math.cos(t*0.25))},0.22)`;
+  ctx.fillRect(0,0,VW,VH);
+
+  // 2) spinning rays from center
+  ctx.save(); ctx.translate(VW/2,VH/2); ctx.rotate(t*0.02);
+  for(let i=0;i<24;i++){
+    ctx.rotate(Math.PI*2/24);
+    ctx.fillStyle=`hsla(${(i*15+t*4)%360},100%,60%,0.30)`;
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(820,-46); ctx.lineTo(820,46); ctx.closePath(); ctx.fill();
   }
-  // box
-  const bw=620,bh=310,bx=VW/2-310,by=VH/2-155;
-  ctx.fillStyle='#0d0066'; ctx.fillRect(bx,by,bw,bh);
-  ctx.strokeStyle='#ffcc00'; ctx.lineWidth=4; ctx.strokeRect(bx,by,bw,bh);
-  // rainbow border
-  for(let i=0;i<10;i++){
-    ctx.fillStyle=`hsl(${(i*36+winTimer*3)%360},100%,60%)`;
-    ctx.fillRect(bx+i*10,by+bh-14,10,14);
-    ctx.fillRect(bx+bw-(i+1)*10,by+bh-14,10,14);
-  }
-  ctx.textAlign='center';
-  ctx.fillStyle='#ffcc00'; ctx.font='bold 16px monospace';
-  ctx.fillText('🎉 🎂 🎉 🎂 🎉 🎂 🎉 🎂 🎉',VW/2,by+50);
-  const pulse=Math.abs(Math.sin(winTimer*0.045))*0.25+0.95;
-  ctx.save(); ctx.translate(VW/2,by+170); ctx.scale(pulse,pulse);
-  ctx.fillStyle='#ffffff'; ctx.font='bold 64px monospace'; ctx.fillText('CHÚC MỪNG',0,0);
   ctx.restore();
-  ctx.fillStyle='#888'; ctx.font='13px monospace';
-  ctx.fillText('Nhấn R / chạm để chơi lại',VW/2,by+270);
+
+  // 3) confetti + emoji rain
+  updateConfetti(); drawConfetti();
+  ctx.font='30px serif'; ctx.textAlign='center';
+  for(let i=0;i<46;i++){
+    const x=(i*89 + t*(1+i%3))%VW;
+    const y=((i*61 + t*(2+i%4))%(VH+50))-25;
+    ctx.fillText(EMOJIS[i%EMOJIS.length], x, y);
+  }
+
+  // 4) PHOTO — pulsing, wobbling, with spinning rainbow ring
+  const cx=VW/2, cy=VH*0.40;
+  const ps=150 + Math.sin(t*0.12)*22;
+  ctx.save();
+  ctx.translate(cx,cy);
+  ctx.rotate(Math.sin(t*0.08)*0.14);
+  // spinning rainbow ring
+  for(let i=0;i<40;i++){
+    ctx.save(); ctx.rotate(t*0.05 + i*Math.PI*2/40);
+    ctx.fillStyle=`hsl(${(i*9+t*6)%360},100%,55%)`;
+    ctx.fillRect(ps*0.78,-7,20,14);
+    ctx.restore();
+  }
+  if(bdayReady){
+    const iw=bdayImg.naturalWidth, ih=bdayImg.naturalHeight;
+    const side=ps*1.42, s=Math.min(iw,ih);
+    ctx.save();
+    ctx.beginPath(); ctx.arc(0,0,side/2,0,Math.PI*2); ctx.clip();
+    ctx.drawImage(bdayImg,(iw-s)/2,(ih-s)/2,s,s,-side/2,-side/2,side,side);
+    ctx.restore();
+    ctx.lineWidth=7; ctx.strokeStyle='#fff';
+    ctx.beginPath(); ctx.arc(0,0,side/2,0,Math.PI*2); ctx.stroke();
+  } else {
+    ctx.fillStyle='#fff'; ctx.font='bold 20px monospace';
+    ctx.fillText('(đang tải ảnh...)',0,0);
+  }
+  ctx.restore();
+
+  // 5) giant pulsing rainbow per-letter text
+  const pulse=1+Math.sin(t*0.15)*0.08;
+  ctx.save(); ctx.translate(VW/2, VH-104);
+  ctx.scale(pulse,pulse); ctx.rotate(Math.sin(t*0.1)*0.04);
+  ctx.font='bold 54px monospace'; ctx.textAlign='left';
+  const txt='CHÚC MỪNG SINH NHẬT!';
+  const total=ctx.measureText(txt).width; let xx=-total/2;
+  for(let i=0;i<txt.length;i++){
+    const ch=txt[i], cw=ctx.measureText(ch).width;
+    const yo=Math.sin(t*0.2+i*0.5)*7;
+    ctx.fillStyle=`hsl(${(i*25+t*8)%360},100%,55%)`;
+    ctx.strokeStyle='#000'; ctx.lineWidth=5;
+    ctx.strokeText(ch,xx+cw/2-cw/2,yo);
+    ctx.fillText(ch,xx+cw/2-cw/2,yo);
+    xx+=cw;
+  }
+  ctx.restore();
+
+  ctx.fillStyle='#fff'; ctx.font='bold 14px monospace'; ctx.textAlign='center';
+  ctx.fillText('Nhấn R / chạm để chơi lại',VW/2,VH-26);
   ctx.textAlign='left';
-  // cake on side
-  drawCake(bx-80, by+bh-82);
-  drawCake(bx+bw+10, by+bh-82);
 }
 
 function spawnConfetti(){
   confetti=[];
-  for(let i=0;i<180;i++){
+  for(let i=0;i<170;i++){
     confetti.push({
       x:Math.random()*VW, y:Math.random()*VH-VH,
       vx:(Math.random()-0.5)*3.5, vy:Math.random()*3+1,
@@ -936,23 +1049,23 @@ function buildLevel(){
 
   // Enemies
   // Duệ – patrol
-  enemies.push(new EnemyDue(320, GY-38));
-  enemies.push(new EnemyDue(1020, GY-38));
-  enemies.push(new EnemyDue(2640, GY-38));
-  enemies.push(new EnemyDue(3420, GY-38));
+  enemies.push(new EnemyDue(320, GY-92));
+  enemies.push(new EnemyDue(1020, GY-92));
+  enemies.push(new EnemyDue(2640, GY-92));
+  enemies.push(new EnemyDue(3420, GY-92));
 
   // Dương slim – chaser
-  enemies.push(new EnemyDuong(1750, GY-50));
-  enemies.push(new EnemyDuong(2900, GY-50));
-  enemies.push(new EnemyDuong(3680, GY-50));
+  enemies.push(new EnemyDuong(1750, GY-124));
+  enemies.push(new EnemyDuong(2900, GY-124));
+  enemies.push(new EnemyDuong(3680, GY-124));
 
   // Duy câm – shooter
-  enemies.push(new EnemyDuyCam(1220, GY-44));
-  enemies.push(new EnemyDuyCam(2250, GY-44));
-  enemies.push(new EnemyDuyCam(3530, GY-44));
+  enemies.push(new EnemyDuyCam(1220, GY-108));
+  enemies.push(new EnemyDuyCam(2250, GY-108));
+  enemies.push(new EnemyDuyCam(3530, GY-108));
 
   // Boss
-  boss = new EnemyBoss(4900, GY-76);
+  boss = new EnemyBoss(4900, GY-190);
   enemies.push(boss);
 
   // Pre-placed items
