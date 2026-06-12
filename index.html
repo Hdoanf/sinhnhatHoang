@@ -15,16 +15,16 @@
            max-width: 100%; max-height: 100%; }
   #ctrl { color: #667; font: 11px monospace; margin-top: 6px; text-align: center; letter-spacing: 1px; }
 
-  /* Force landscape: rotate the whole game 90° when phone is portrait */
+  /* Force landscape: rotate 90° ONLY on touch phones held in portrait */
   @media screen and (orientation: portrait) {
-    #wrap {
+    body.mobile #wrap {
       position: absolute;
       top: 100vh; left: 0;
       width: 100vh; height: 100vw;
       transform: rotate(-90deg);
       transform-origin: left top;
     }
-    #ctrl { display: none; }
+    body.mobile #ctrl { display: none; }
   }
 
   /* Touch controls */
@@ -163,6 +163,7 @@ document.addEventListener('keyup',  e => { keys[e.code] = false; });
 // ─── TOUCH CONTROLS ───────────────────────────────────────────────────────
 const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 if (isTouch) {
+  document.body.classList.add('mobile');
   document.getElementById('touch').classList.add('on');
   const bind = (id, code) => {
     const el = document.getElementById(id);
